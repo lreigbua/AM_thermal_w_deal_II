@@ -1,15 +1,20 @@
-
 // # physics constants
 double global_PI = 3.1415927;
+
+// Heat acitvation area
+double square_length = 0.2;
 
 // # Laser
 double global_Pow_laser = 0.4;      // power [W]
 double global_spotsize_at_e_2 = 20e-6;  // laser spot size at e^(-2) [m]
 double global_c_laser = global_spotsize_at_e_2 / 4.0;   // C parameter in Gaussian func, [m]
 double global_c_hwhm = global_c_laser * 2.35482 / 2;    // HWHM, [m]
-double global_V_scan_x = 10e-3;   // scan speed, [m/s]
+// double global_V_scan_x = 10e-3;   // scan speed, [m/s]
+double global_V_scan_x = 4;   // scan speed, [m/s]
+double global_V_scan_y = 0;   // scan speed, [m/s]
 
-double global_init_position_x0 = -50e-6;    // initial spot center position
+double global_init_position_x0 = 0;    // initial spot center position
+double global_init_position_y0 = 1;
 
 // # material
 // thin film

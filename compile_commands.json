@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/mnt/c/Ubuntu_app_softwares/dealii-9.5.1/examples/moving-heat-with-adaptive",
+  "command": "/usr/bin/c++  -DDEBUG -isystem /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi -isystem /usr/lib/x86_64-linux-gnu/openmpi/include -isystem /usr/include/petsc -isystem /usr/include/trilinos -isystem /usr/include/hdf5/openmpi -isystem /usr/include/scotch -isystem /usr/include/suitesparse -isystem /usr/include/opencascade -isystem /usr/include/slepc    -pedantic -Wall -Wextra -Wmissing-braces -Woverloaded-virtual -Wpointer-arith -Wsign-compare -Wsuggest-override -Wswitch -Wsynth -Wwrite-strings -Wno-placement-new -Wno-deprecated-declarations -Wno-literal-suffix -Wno-psabi -Wno-class-memaccess -Wno-unused-local-typedefs -pthread -g -O2 -fdebug-prefix-map=/build/deal.ii-o0wOgt/deal.ii-9.5.1=. -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2 -std=c++17 -Wno-nonnull-compare -Wno-address -O0 -ggdb -Wa,--compress-debug-sections -std=gnu++17 -o CMakeFiles/main.dir/main.cc.o -c /mnt/c/Ubuntu_app_softwares/dealii-9.5.1/examples/moving-heat-with-adaptive/main.cc",
+  "file": "/mnt/c/Ubuntu_app_softwares/dealii-9.5.1/examples/moving-heat-with-adaptive/main.cc"
+}
+]

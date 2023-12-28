@@ -50,13 +50,6 @@
 #include <filesystem>
 
 
-// Including the header file for the right hand side and boundary values
-#ifndef GLOBAL_PARA
-#define GLOBAL_PARA
-#include "./globalPara.h"
-// #include "./boundaryInit.h"
-// #include "./rightHandSide.h"
-#endif
 
 
 // Then the usual placing of all content of this program into a namespace and
@@ -66,24 +59,15 @@ namespace Step26
 {
   using namespace dealii;
 
+  // Including the header file for the right hand side and boundary values
+  #ifndef GLOBAL_PARA
+  #define GLOBAL_PARA
+  #include "./globalPara.h"
+  // #include "./boundaryInit.h"
+  #include "./rightHandSide.h"
+  #endif
 
-  // @sect3{The <code>HeatEquation</code> class}
-  //
-  // The next piece is the declaration of the main class of this program. It
-  // follows the well trodden path of previous examples. If you have looked at
-  // step-6, for example, the only thing worth noting here is that we need to
-  // build two matrices (the mass and Laplace matrix) and keep the current and
-  // previous time step's solution. We then also need to store the current
-  // time, the size of the time step, and the number of the current time
-  // step. The last of the member variables denotes the theta parameter
-  // discussed in the introduction that allows us to treat the explicit and
-  // implicit Euler methods as well as the Crank-Nicolson method and other
-  // generalizations all in one program.
-  //
-  // As far as member functions are concerned, the only possible surprise is
-  // that the <code>refine_mesh</code> function takes arguments for the
-  // minimal and maximal mesh refinement level. The purpose of this is
-  // discussed in the introduction.
+
   template <int dim>
   class HeatEquation
   {
@@ -122,66 +106,6 @@ namespace Step26
     std::string output_directory;
   };
 
-
-
-  // @sect3{Equation data}
-
-  // In the following classes and functions, we implement the various pieces
-  // of data that define this problem (right hand side and boundary values)
-  // that are used in this program and for which we need function objects. The
-  // right hand side is chosen as discussed at the end of the
-  // introduction. For boundary values, we choose zero values, but this is
-  // easily changed below.
-  template <int dim>
-  class RightHandSide : public Function<dim>
-  {
-  public:
-    RightHandSide()
-      : Function<dim>()
-      , period(0.2)
-    {}
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-
-  private:
-    const double period;
-  };
-
-
-
-  template <int dim>
-  double RightHandSide<dim>::value(const Point<dim> & p,
-                                   const unsigned int component) const
-  {
-    (void)component;
-    AssertIndexRange(component, 1);
-    Assert(dim == 2, ExcNotImplemented());
-
-    const double time = this->get_time();
-    const double point_within_period =
-      (time / period - std::floor(time / period));
-
-    if ((point_within_period >= 0.0) && (point_within_period <= 0.2))
-      {
-        if ((p[0] > 0.5) && (p[1] > -0.5))
-          return 2;
-        else
-          return 0;
-      }
-    else if ((point_within_period >= 0.5) && (point_within_period <= 0.7))
-      {
-        if ((p[0] > -0.5) && (p[1] > 0.5))
-          return 1;
-        else
-          return 0;
-      }
-    else
-      return 0;
-  }
-
-
-
   template <int dim>
   class BoundaryValues : public Function<dim>
   {
@@ -202,15 +126,6 @@ namespace Step26
   }
 
 
-
-  // @sect3{The <code>HeatEquation</code> implementation}
-  //
-  // It is time now for the implementation of the main class. Let's
-  // start with the constructor which selects a linear element, a time
-  // step constant at 1/500 (remember that one period of the source
-  // on the right hand side was set to 0.2 above, so we resolve each
-  // period with 100 time steps) and chooses the Crank Nicolson method
-  // by setting $\theta=1/2$.
   template <int dim>
   HeatEquation<dim>::HeatEquation()
     : fe(1)
@@ -423,35 +338,6 @@ namespace Step26
   }
 
 
-
-  // @sect4{<code>HeatEquation::run</code>}
-  //
-  // This is the main driver of the program, where we loop over all
-  // time steps. At the top of the function, we set the number of
-  // initial global mesh refinements and the number of initial cycles of
-  // adaptive mesh refinement by repeating the first time step a few
-  // times. Then we create a mesh, initialize the various objects we will
-  // work with, set a label for where we should start when re-running
-  // the first time step, and interpolate the initial solution onto
-  // out mesh (we choose the zero function here, which of course we could
-  // do in a simpler way by just setting the solution vector to zero). We
-  // also output the initial time step once.
-  //
-  // @note If you're an experienced programmer, you may be surprised
-  // that we use a <code>goto</code> statement in this piece of code!
-  // <code>goto</code> statements are not particularly well liked any
-  // more since Edsgar Dijkstra, one of the greats of computer science,
-  // wrote a letter in 1968 called "Go To Statement considered harmful"
-  // (see <a href="http://en.wikipedia.org/wiki/Considered_harmful">here</a>).
-  // The author of this code subscribes to this notion whole-heartedly:
-  // <code>goto</code> is hard to understand. In fact, deal.II contains
-  // virtually no occurrences: excluding code that was essentially
-  // transcribed from books and not counting duplicated code pieces,
-  // there are 3 locations in about 600,000 lines of code at the time
-  // this note is written; we also use it in 4 tutorial programs, in
-  // exactly the same context as here. Instead of trying to justify
-  // the occurrence here, let's first look at the code and we'll come
-  // back to the issue at the end of function.
   template <int dim>
   void HeatEquation<dim>::run()
   {
@@ -619,76 +505,8 @@ namespace Step26
       }
   }
 } // namespace Step26
-// Now that you have seen what the function does, let us come back to the issue
-// of the <code>goto</code>. In essence, what the code does is
-// something like this:
-// @code
-//   void run ()
-//   {
-//     initialize;
-//   start_time_iteration:
-//     for (timestep=1...)
-//     {
-//        solve timestep;
-//        if (timestep==1 && not happy with the result)
-//        {
-//          adjust some data structures;
-//          goto start_time_iteration; // simply try again
-//        }
-//        postprocess;
-//     }
-//   }
-// @endcode
-// Here, the condition "happy with the result" is whether we'd like to keep
-// the current mesh or would rather refine the mesh and start over on the
-// new mesh. We could of course replace the use of the <code>goto</code>
-// by the following:
-// @code
-//   void run ()
-//   {
-//     initialize;
-//     while (true)
-//     {
-//        solve timestep;
-//        if (not happy with the result)
-//           adjust some data structures;
-//        else
-//           break;
-//     }
-//     postprocess;
-//
-//     for (timestep=2...)
-//     {
-//        solve timestep;
-//        postprocess;
-//     }
-//   }
-// @endcode
-// This has the advantage of getting rid of the <code>goto</code>
-// but the disadvantage of having to duplicate the code that implements
-// the "solve timestep" and "postprocess" operations in two different
-// places. This could be countered by putting these parts of the code
-// (sizable chunks in the actual implementation above) into their
-// own functions, but a <code>while(true)</code> loop with a
-// <code>break</code> statement is not really all that much easier
-// to read or understand than a <code>goto</code>.
-//
-// In the end, one might simply agree that <i>in general</i>
-// <code>goto</code> statements are a bad idea but be pragmatic and
-// state that there may be occasions where they can help avoid code
-// duplication and awkward control flow. This may be one of these
-// places, and it matches the position Steve McConnell takes in his
-// excellent book "Code Complete" @cite CodeComplete about good
-// programming practices (see the mention of this book in the
-// introduction of step-1) that spends a surprising ten pages on the
-// question of <code>goto</code> in general.
 
 
-// @sect3{The <code>main</code> function}
-//
-// Having made it this far,  there is, again, nothing
-// much to discuss for the main function of this
-// program: it looks like all such functions since step-6.
 int main()
 {
   try
