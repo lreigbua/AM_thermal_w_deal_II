@@ -88,7 +88,10 @@ namespace Step26
                      const unsigned int max_grid_level);
     
     // methods developed by me:
-    void set_active_FEs();
+    // void set_active_FEs();
+    void activate_FEs();
+    void deactivate_FEs();
+
     void Create_Initial_Triangulation();
 
     Triangulation<dim> triangulation;
@@ -164,8 +167,6 @@ namespace Step26
 
   }
 
-
-
   // @sect4{<code>HeatEquation::setup_system</code>}
   //
   // The next function is the one that sets up the DoFHandler object,
@@ -220,12 +221,10 @@ namespace Step26
 
   // Method to specify the active and inactive FEs from the triangulation, which change every time powder is added.
   template <int dim>
-  void HeatEquation<dim>::set_active_FEs()
+  void HeatEquation<dim>::deactivate_FEs()
   {
-    const Point<2> point(2, 1);
+    const Point<2> point(0, 0);
 
-    
-    
     for (auto &cell: dof_handler.active_cell_iterators())
     {
       for (const auto v : cell->vertex_indices()){
@@ -239,11 +238,22 @@ namespace Step26
           }else{
             cell->set_active_fe_index(0);
           }
-
-      dof_handler.distribute_dofs(fe_collection);
-
       }
     }
+    dof_handler.distribute_dofs(fe_collection);
+  }
+
+  // Method to specify the active and inactive FEs from the triangulation, which change every time powder is added.
+  template <int dim>
+  void HeatEquation<dim>::activate_FEs()
+  {
+    const Point<2> point(0, 0);
+
+    for (auto &cell: dof_handler.active_cell_iterators())
+    {
+            cell->set_active_fe_index(0);
+    }
+    dof_handler.distribute_dofs(fe_collection);
   }
 
   // @sect4{<code>HeatEquation::solve_time_step</code>}
@@ -401,6 +411,7 @@ namespace Step26
     // continuous. This is necessary since SolutionTransfer only operates on
     // cells locally, without regard to the neighborhood.
     triangulation.execute_coarsening_and_refinement();
+    if (timestep_number == 25) deactivate_FEs();
     setup_system();
 
     solution_trans.interpolate(previous_solution, solution);
@@ -434,8 +445,8 @@ namespace Step26
 
     Create_Initial_Triangulation();
 
-    set_active_FEs();
-
+    // set_active_FEs();
+    // deactivate_FEs();
     setup_system();
 
     unsigned int pre_refinement_step = 0;
@@ -444,8 +455,6 @@ namespace Step26
     Vector<double> forcing_terms;
 
   start_time_iteration:
-
-    
 
     time            = 0.0;
     timestep_number = 0;
@@ -472,6 +481,8 @@ namespace Step26
         
         time += time_step;
         ++timestep_number;
+
+        
 
         std::cout << "Time step " << timestep_number << " at t=" << time
                   << std::endl;
@@ -558,7 +569,6 @@ namespace Step26
         if ((timestep_number == 1) &&
             (pre_refinement_step < n_adaptive_pre_refinement_steps))
           {
-            
             refine_mesh(initial_global_refinement,
                         initial_global_refinement +
                           n_adaptive_pre_refinement_steps);
