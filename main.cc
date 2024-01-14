@@ -434,7 +434,7 @@ namespace Step26
 
     Create_Initial_Triangulation();
 
-    // set_active_FEs();
+    set_active_FEs();
 
     setup_system();
 
