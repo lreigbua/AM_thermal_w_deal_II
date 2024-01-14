@@ -37,6 +37,7 @@
 #include <deal.II/grid/grid_out.h>
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
+#include <deal.II/fe/fe_nothing.h>
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/numerics/data_out.h>
@@ -48,6 +49,10 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+
+#include <deal.II/hp/fe_collection.h>
+#include <deal.II/hp/fe_values.h>
+#include <deal.II/hp/refinement.h>
 
 
 
@@ -81,8 +86,15 @@ namespace Step26
     void output_results() const;
     void refine_mesh(const unsigned int min_grid_level,
                      const unsigned int max_grid_level);
+    
+    // methods developed by me:
+    void set_active_FEs();
+    void Create_Initial_Triangulation();
 
     Triangulation<dim> triangulation;
+
+    const unsigned int initial_global_refinement;
+
     FE_Q<dim>          fe;
     DoFHandler<dim>    dof_handler;
 
@@ -101,9 +113,15 @@ namespace Step26
     double       time_step;
     unsigned int timestep_number;
 
+
     const double theta;
 
     std::string output_directory;
+
+    // attributes developed by me:
+    hp::FECollection<dim>    fe_collection;
+    hp::QCollection<dim>     quadrature_collection;
+    hp::QCollection<dim - 1> face_quadrature_collection;
   };
 
   template <int dim>
@@ -128,12 +146,23 @@ namespace Step26
 
   template <int dim>
   HeatEquation<dim>::HeatEquation()
-    : fe(1)
+    : initial_global_refinement(2)
+    , fe(1)
     , dof_handler(triangulation)
     , time_step(1. / 500)
     , theta(0.5)
     , output_directory("output")
-  {}
+  {
+    fe_collection.push_back(FE_Q<dim>(1));
+    fe_collection.push_back(FE_Nothing<dim>());
+
+    quadrature_collection.push_back(QGauss<dim>(2));
+    quadrature_collection.push_back(QGauss<dim>(2));
+
+    face_quadrature_collection.push_back(QGauss<dim - 1>(2));
+    face_quadrature_collection.push_back(QGauss<dim - 1>(2));    
+
+  }
 
 
 
@@ -152,7 +181,7 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::setup_system()
   {
-    dof_handler.distribute_dofs(fe);
+    dof_handler.distribute_dofs(fe_collection);
 
     std::cout << std::endl
               << "===========================================" << std::endl
@@ -178,10 +207,10 @@ namespace Step26
     system_matrix.reinit(sparsity_pattern);
 
     MatrixCreator::create_mass_matrix(dof_handler,
-                                      QGauss<dim>(fe.degree + 1),
+                                      quadrature_collection,
                                       mass_matrix);
     MatrixCreator::create_laplace_matrix(dof_handler,
-                                         QGauss<dim>(fe.degree + 1),
+                                         quadrature_collection,
                                          laplace_matrix);
 
     solution.reinit(dof_handler.n_dofs());
@@ -189,6 +218,33 @@ namespace Step26
     system_rhs.reinit(dof_handler.n_dofs());
   }
 
+  // Method to specify the active and inactive FEs from the triangulation, which change every time powder is added.
+  template <int dim>
+  void HeatEquation<dim>::set_active_FEs()
+  {
+    const Point<2> point(2, 1);
+
+    
+    
+    for (auto &cell: dof_handler.active_cell_iterators())
+    {
+      for (const auto v : cell->vertex_indices()){
+
+          const double distance_from_point =
+          point.distance(cell->vertex(v));
+
+          if (distance_from_point < 0.5){
+            cell->set_active_fe_index(1);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
+            break;
+          }else{
+            cell->set_active_fe_index(0);
+          }
+
+      dof_handler.distribute_dofs(fe_collection);
+
+      }
+    }
+  }
 
   // @sect4{<code>HeatEquation::solve_time_step</code>}
   //
@@ -221,14 +277,28 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::output_results() const
   {
+    
     DataOut<dim> data_out;
 
+
+
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(solution, "U");
+
+    //Output de degrees of freedom in every element:
+    Vector<float> fe_degrees(triangulation.n_active_cells());
+      for (const auto &cell : dof_handler.active_cell_iterators())
+        fe_degrees(cell->active_cell_index()) =
+          fe_collection[cell->active_fe_index()].degree;
+
+    data_out.add_data_vector(fe_degrees, "fe_degree");
+
+    data_out.add_data_vector(solution, "T");
 
     data_out.build_patches();
 
     data_out.set_flags(DataOutBase::VtkFlags(time, timestep_number));
+    
+    
 
     // create output output_directory if it does not exist:
     if (!std::filesystem::exists(output_directory)) (std::filesystem::create_directory(output_directory));
@@ -272,7 +342,7 @@ namespace Step26
 
     KellyErrorEstimator<dim>::estimate(
       dof_handler,
-      QGauss<dim - 1>(fe.degree + 1),
+      face_quadrature_collection,
       std::map<types::boundary_id, const Function<dim> *>(),
       solution,
       estimated_error_per_cell);
@@ -337,13 +407,9 @@ namespace Step26
     constraints.distribute(solution);
   }
 
-
   template <int dim>
-  void HeatEquation<dim>::run()
+  void HeatEquation<dim>::Create_Initial_Triangulation()
   {
-    const unsigned int initial_global_refinement       = 2;
-    const unsigned int n_adaptive_pre_refinement_steps = 4;
-
     Point<dim> p1;
     Point<dim> p2;
 
@@ -357,9 +423,18 @@ namespace Step26
       p2 = {2, 1, 1};
     }
 
-
     GridGenerator::hyper_rectangle(triangulation, p1 , p2);
     triangulation.refine_global(initial_global_refinement);
+  }
+
+  template <int dim>
+  void HeatEquation<dim>::run()
+  {
+    const unsigned int n_adaptive_pre_refinement_steps = 4;
+
+    Create_Initial_Triangulation();
+
+    // set_active_FEs();
 
     setup_system();
 
@@ -369,6 +444,8 @@ namespace Step26
     Vector<double> forcing_terms;
 
   start_time_iteration:
+
+    
 
     time            = 0.0;
     timestep_number = 0;
@@ -392,6 +469,7 @@ namespace Step26
     // help of a temporary vector:
     while (time <= 0.5)
       {
+        
         time += time_step;
         ++timestep_number;
 
@@ -413,7 +491,7 @@ namespace Step26
         RightHandSide<dim> rhs_function;
         rhs_function.set_time(time);
         VectorTools::create_right_hand_side(dof_handler,
-                                            QGauss<dim>(fe.degree + 1),
+                                            quadrature_collection,
                                             rhs_function,
                                             tmp);
         forcing_terms = tmp;
@@ -421,7 +499,7 @@ namespace Step26
 
         rhs_function.set_time(time - time_step);
         VectorTools::create_right_hand_side(dof_handler,
-                                            QGauss<dim>(fe.degree + 1),
+                                            quadrature_collection,
                                             rhs_function,
                                             tmp);
 
@@ -480,6 +558,7 @@ namespace Step26
         if ((timestep_number == 1) &&
             (pre_refinement_step < n_adaptive_pre_refinement_steps))
           {
+            
             refine_mesh(initial_global_refinement,
                         initial_global_refinement +
                           n_adaptive_pre_refinement_steps);
