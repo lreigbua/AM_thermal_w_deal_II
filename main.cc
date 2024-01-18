@@ -251,7 +251,7 @@ namespace Step26
 
     for (auto &cell: dof_handler.active_cell_iterators())
     {
-            cell->set_active_fe_index(0);
+            cell->set_future_fe_index(0);
     }
     dof_handler.distribute_dofs(fe_collection);
   }
@@ -410,8 +410,8 @@ namespace Step26
     // freedom located on hanging nodes are so that the solution is
     // continuous. This is necessary since SolutionTransfer only operates on
     // cells locally, without regard to the neighborhood.
+    if (timestep_number == 25) activate_FEs();
     triangulation.execute_coarsening_and_refinement();
-    if (timestep_number == 25) deactivate_FEs();
     setup_system();
 
     solution_trans.interpolate(previous_solution, solution);
@@ -446,7 +446,7 @@ namespace Step26
     Create_Initial_Triangulation();
 
     // set_active_FEs();
-    // deactivate_FEs();
+    deactivate_FEs();
     setup_system();
 
     unsigned int pre_refinement_step = 0;
