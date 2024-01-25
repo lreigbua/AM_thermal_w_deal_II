@@ -54,6 +54,9 @@
 #include <deal.II/hp/fe_values.h>
 #include <deal.II/hp/refinement.h>
 
+//try to use parallel solution transfer
+#include <deal.II/distributed/tria.h>
+#include <deal.II/distributed/solution_transfer.h>
 
 
 
@@ -94,8 +97,12 @@ namespace Step26
 
     void Create_Initial_Triangulation();
 
-    Triangulation<dim> triangulation;
+    MPI_Comm mpi_communicator;
 
+    // Triangulation<dim> triangulation;
+    parallel::distributed::Triangulation<dim> triangulation;
+
+    
     const unsigned int initial_global_refinement;
 
     FE_Q<dim>          fe;
@@ -149,22 +156,23 @@ namespace Step26
 
   template <int dim>
   HeatEquation<dim>::HeatEquation()
-    : initial_global_refinement(2)
+    : mpi_communicator(MPI_COMM_WORLD)
+    , triangulation(MPI_COMM_WORLD)
+    , initial_global_refinement(2)
     , fe(1)
     , dof_handler(triangulation)
-    , time_step(1. / 500)
+    , time_step(2. / 500)
     , theta(0.5)
     , output_directory("output")
   {
     fe_collection.push_back(FE_Q<dim>(1));
-    fe_collection.push_back(FE_Nothing<dim>());
+    fe_collection.push_back(FE_Nothing<dim>(1, true));
 
     quadrature_collection.push_back(QGauss<dim>(2));
     quadrature_collection.push_back(QGauss<dim>(2));
 
     face_quadrature_collection.push_back(QGauss<dim - 1>(2));
     face_quadrature_collection.push_back(QGauss<dim - 1>(2));    
-
   }
 
   // @sect4{<code>HeatEquation::setup_system</code>}
@@ -223,16 +231,13 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::deactivate_FEs()
   {
-    const Point<2> point(0, 0);
 
     for (auto &cell: dof_handler.active_cell_iterators())
     {
-      for (const auto v : cell->vertex_indices()){
-
-          const double distance_from_point =
-          point.distance(cell->vertex(v));
-
-          if (distance_from_point < 0.5){
+      for (const auto v : cell->vertex_indices())
+      {
+          Point<dim> Vertex_Point = cell->vertex(v);
+          if (Vertex_Point[1] > layer_thickness + 1e-6){
             cell->set_active_fe_index(1);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
             break;
           }else{
@@ -243,17 +248,28 @@ namespace Step26
     dof_handler.distribute_dofs(fe_collection);
   }
 
-  // Method to specify the active and inactive FEs from the triangulation, which change every time powder is added.
+  // Method to activate cells
   template <int dim>
   void HeatEquation<dim>::activate_FEs()
   {
-    const Point<2> point(0, 0);
+    // for (auto &cell: dof_handler.active_cell_iterators())
+    // {
+    //   if (cell->active_fe_index() == 1){
+    //     cell->set_future_fe_index(0);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
+    //   }
+    // }
 
     for (auto &cell: dof_handler.active_cell_iterators())
     {
-            cell->set_future_fe_index(0);
+      for (const auto v : cell->vertex_indices())
+      {
+          Point<dim> Vertex_Point = cell->vertex(v);
+          if (Vertex_Point[1] <= layer_thickness + static_cast<int>(std::roundl(time / layer_time)) * layer_thickness - 12e-6){
+            cell->set_future_fe_index(0);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
+            break;
+          }
+      }
     }
-    dof_handler.distribute_dofs(fe_collection);
   }
 
   // @sect4{<code>HeatEquation::solve_time_step</code>}
@@ -263,7 +279,7 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::solve_time_step()
   {
-    SolverControl            solver_control(1000, 1e-8 * system_rhs.l2_norm());
+    SolverControl   solver_control(1000, 1e-8 * system_rhs.l2_norm());
     SolverCG<Vector<double>> cg(solver_control);
 
     PreconditionSSOR<SparseMatrix<double>> preconditioner;
@@ -289,8 +305,6 @@ namespace Step26
   {
     
     DataOut<dim> data_out;
-
-
 
     data_out.attach_dof_handler(dof_handler);
 
@@ -359,8 +373,8 @@ namespace Step26
 
     GridRefinement::refine_and_coarsen_fixed_fraction(triangulation,
                                                       estimated_error_per_cell,
-                                                      0.6,
-                                                      0.4);
+                                                      0.55,
+                                                      0.45);
 
     if (triangulation.n_levels() > max_grid_level)
       for (const auto &cell :
@@ -394,28 +408,38 @@ namespace Step26
     // Consequently, we initialize a SolutionTransfer object by attaching
     // it to the old DoF handler. We then prepare the triangulation and the
     // data vector for refinement (in this order).
-    SolutionTransfer<dim> solution_trans(dof_handler);
+    
+    // SolutionTransfer<dim> solution_trans(dof_handler);
+
+    parallel::distributed::SolutionTransfer< dim, Vector<double>> solution_trans(dof_handler, true);
 
     Vector<double> previous_solution;
     previous_solution = solution;
     triangulation.prepare_coarsening_and_refinement();
     solution_trans.prepare_for_coarsening_and_refinement(previous_solution);
 
-    // Now everything is ready, so do the refinement and recreate the DoF
-    // structure on the new grid, and finally initialize the matrix structures
-    // and the new vectors in the <code>setup_system</code> function. Next, we
-    // actually perform the interpolation of the solution from old to new
-    // grid. The final step is to apply the hanging node constraints to the
+    if (time > 1e-10 && std::fmod(time, layer_time) < 1e-10){
+      activate_FEs(); // using set_future_FE_index()
+    }
+
+    triangulation.execute_coarsening_and_refinement();
+    setup_system();
+
+    if (time > 1e-10 && std::fmod(time, layer_time) < 1e-10){
+      solution = 50.;
+    }
+
+    solution_trans.interpolate(solution);
+    // solution_trans.interpolate(previous_solution, solution); this is for not paralel distributed triangulations
+
+    //The final step is to apply the hanging node constraints to the
     // solution vector, i.e., to make sure that the values of degrees of
     // freedom located on hanging nodes are so that the solution is
     // continuous. This is necessary since SolutionTransfer only operates on
     // cells locally, without regard to the neighborhood.
-    if (timestep_number == 25) activate_FEs();
-    triangulation.execute_coarsening_and_refinement();
-    setup_system();
-
-    solution_trans.interpolate(previous_solution, solution);
     constraints.distribute(solution);
+
+
   }
 
   template <int dim>
@@ -428,10 +452,10 @@ namespace Step26
 
     if (dim == 2){
       p1 = {0, 0};
-      p2 = {2, 1};
+      p2 = {l_x, l_y};
     } else if (dim == 3){
       p1 = {0, 0, 0};
-      p2 = {2, 1, 1};
+      p2 = {l_x, l_y, l_y};
     }
 
     GridGenerator::hyper_rectangle(triangulation, p1 , p2);
@@ -445,7 +469,6 @@ namespace Step26
 
     Create_Initial_Triangulation();
 
-    // set_active_FEs();
     deactivate_FEs();
     setup_system();
 
@@ -464,7 +487,7 @@ namespace Step26
 
 
     VectorTools::interpolate(dof_handler,
-                             Functions::ZeroFunction<dim>(),
+                             Functions::ConstantFunction<dim>(0.),
                              old_solution);
     solution = old_solution;
 
@@ -476,7 +499,7 @@ namespace Step26
     // Recall that it contains the term $MU^{n-1}-(1-\theta)k_n AU^{n-1}$.
     // We put these terms into the variable system_rhs, with the
     // help of a temporary vector:
-    while (time <= 0.5)
+    while (time <= global_simulation_end_time)
       {
         
         time += time_step;
@@ -505,6 +528,17 @@ namespace Step26
                                             quadrature_collection,
                                             rhs_function,
                                             tmp);
+        
+        // add convection to rhs
+        Vector<double> tmp2(tmp.size());
+        VectorTools::create_boundary_right_hand_side(
+          dof_handler,
+          face_quadrature_collection,
+          Functions::ConstantFunction<dim>(conv_heat_loss),
+          tmp2);
+        
+        tmp += tmp2;
+
         forcing_terms = tmp;
         forcing_terms *= time_step * theta;
 
@@ -513,6 +547,15 @@ namespace Step26
                                             quadrature_collection,
                                             rhs_function,
                                             tmp);
+
+        // add convection to rhs
+        VectorTools::create_boundary_right_hand_side(
+          dof_handler,
+          face_quadrature_collection,
+          Functions::ConstantFunction<dim>(conv_heat_loss),
+          tmp2);
+        
+        tmp += tmp2;
 
         forcing_terms.add(time_step * (1 - theta), tmp);
 
@@ -536,19 +579,19 @@ namespace Step26
         // done many times before. The result is used to also
         // set the correct boundary values in the linear system:
         {
-          BoundaryValues<dim> boundary_values_function;
-          boundary_values_function.set_time(time);
+          // BoundaryValues<dim> boundary_values_function;
+          // boundary_values_function.set_time(time);
 
-          std::map<types::global_dof_index, double> boundary_values;
-          VectorTools::interpolate_boundary_values(dof_handler,
-                                                   0,
-                                                   boundary_values_function,
-                                                   boundary_values);
+          // std::map<types::global_dof_index, double> boundary_values;
+          // VectorTools::interpolate_boundary_values(dof_handler,
+          //                                          0,
+          //                                          boundary_values_function,
+          //                                          boundary_values);
 
-          MatrixTools::apply_boundary_values(boundary_values,
-                                             system_matrix,
-                                             solution,
-                                             system_rhs);
+          // MatrixTools::apply_boundary_values(boundary_values,
+          //                                    system_matrix,
+          //                                    solution,
+          //                                    system_rhs);
         }
 
         // With this out of the way, all we have to do is solve the
@@ -596,11 +639,13 @@ namespace Step26
 } // namespace Step26
 
 
-int main()
+int main(int argc, char *argv[])
 {
   try
     {
       using namespace Step26;
+
+      Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
       HeatEquation<2> heat_equation_solver;
       heat_equation_solver.run();
