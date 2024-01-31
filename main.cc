@@ -188,13 +188,6 @@ namespace Step26
     face_quadrature_collection.push_back(QGauss<dim - 1>(2));    
   }
 
-  // @sect4{<code>HeatEquation::setup_system</code>}
-  //
-  // The next function is the one that sets up the DoFHandler object,
-  // computes the constraints, and sets the linear algebra objects
-  // to their correct sizes. We also compute the mass and Laplace
-  // matrix here by simply calling two functions in the library.
-  //
   // Note that we do not take the hanging node constraints into account when
   // assembling the matrices (both functions have an AffineConstraints argument
   // that defaults to an empty object). This is because we are going to
