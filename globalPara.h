@@ -36,11 +36,10 @@ double global_film_thickness = 400e-9;  // film thickness, [m]
 #define BOUNDARY_NUM 11
 
 // Domain
-double l_x = 1.;
-double l_y = 2.;    
-
+double l_x = 0.25;
+double l_y = 0.25;    
 // recoating
-int n_layers = 4;
+int n_layers = 1;
 double layer_thickness = l_y / n_layers;
 double cooling_time = 0.1;
 
