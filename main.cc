@@ -107,9 +107,6 @@ namespace Step26
     // Triangulation<dim> triangulation;
     parallel::distributed::Triangulation<dim> triangulation;
 
-    
-    const unsigned int initial_global_refinement;
-
     FE_Q<dim>          fe;
     DoFHandler<dim>    dof_handler;
 
@@ -171,7 +168,6 @@ namespace Step26
   HeatEquation<dim>::HeatEquation()
     : mpi_communicator(MPI_COMM_WORLD)
     , triangulation(MPI_COMM_WORLD)
-    , initial_global_refinement(2)
     , fe(1)
     , dof_handler(triangulation)
     , time_step(2. / 500)
@@ -258,24 +254,19 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::activate_FEs()
   {
-    // for (auto &cell: dof_handler.active_cell_iterators())
-    // {
-    //   if (cell->active_fe_index() == 1){
-    //     cell->set_future_fe_index(0);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
-    //   }
-    // }
 
     for (auto &cell: dof_handler.active_cell_iterators())
     {
       for (const auto v : cell->vertex_indices())
       {
           Point<dim> Vertex_Point = cell->vertex(v);
-          if (Vertex_Point[1] <= layer_thickness + static_cast<int>(std::roundl(time / layer_time)) * layer_thickness){
+          if (Vertex_Point[1] <= layer_thickness + static_cast<int>(std::roundl(time / layer_time)) * layer_thickness - 1e-9){
             cell->set_future_fe_index(0);  // index 1 is for FE_Nothing elements, which are elements with 0 degrees of freedom, since it is the second element of the fe_collection array.
             break;
           }
       }
     }
+
   }
 
   template <int dim>
@@ -447,7 +438,7 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::run()
   {
-    const unsigned int n_adaptive_pre_refinement_steps = 4;
+    const unsigned int n_adaptive_pre_refinement_steps = 3;
 
     Create_Initial_Triangulation();
     
