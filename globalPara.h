@@ -7,7 +7,7 @@ double global_PI = 3.1415927;
 double square_length = 0.1;
 
 //Convection
-double conv_heat_loss = -0.001;
+double conv_heat_loss = -0.004;
 
 
 // # Laser
@@ -36,7 +36,7 @@ double global_film_thickness = 400e-9;  // film thickness, [m]
 #define BOUNDARY_NUM 11
 
 // Domain
-double l_x = 2.;
+double l_x = 5.;
 double l_y = 1.;
 
 const unsigned int initial_global_refinement = 3;
@@ -44,9 +44,9 @@ const unsigned int initial_global_refinement = 3;
 // recoating
 int n_layers = 4;
 double layer_thickness = l_y / n_layers;
-double cooling_time = 0.1;
+double cooling_time = 0.2;
 
-double global_V_scan_x = 5;   // scan speed, [m/s]
+double global_V_scan_x = 10;   // scan speed, [m/s]
 
 // # simulation time
 double global_simulation_time_step = 1e-5;          // 10 [us]

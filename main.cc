@@ -1,23 +1,3 @@
-/* ---------------------------------------------------------------------
- *
- * Copyright (C) 2013 - 2021 by the deal.II authors
- *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level output_directory of deal.II.
- *
- * ---------------------------------------------------------------------
-
- *
- * Author: Wolfgang Bangerth, Texas A&M University, 2013
- */
-
-
 // The program starts with the usual include files, all of which you should
 // have seen before by now:
 #include <deal.II/base/utilities.h>
@@ -302,15 +282,13 @@ namespace Step26
         fe_degrees(cell->active_cell_index()) =
           fe_collection[cell->active_fe_index()].degree;
 
-    data_out.add_data_vector(fe_degrees, "fe_degree");
+    data_out.add_data_vector(fe_degrees, "fe_degree", DataOut<dim>::type_cell_data);
 
-    data_out.add_data_vector(solution, "Temperature");
+    data_out.add_data_vector(solution, "Temperature", DataOut<dim>::type_dof_data);
 
     data_out.build_patches();
 
     data_out.set_flags(DataOutBase::VtkFlags(time, timestep_number));
-    
-    
 
     // create output output_directory if it does not exist:
     if (!std::filesystem::exists(output_directory)) (std::filesystem::create_directory(output_directory));
