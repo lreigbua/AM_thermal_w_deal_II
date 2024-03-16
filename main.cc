@@ -409,7 +409,11 @@ namespace Step26
       p2 = {l_x, l_y, l_y};
     }
 
-    GridGenerator::hyper_rectangle(triangulation, p1 , p2);
+    std::vector<unsigned int> reps =  {static_cast<unsigned int>(l_x/layer_thickness), n_layers};
+    // GridGenerator::hyper_rectangle(triangulation, p1 , p2);
+    
+    GridGenerator::subdivided_hyper_rectangle(triangulation, reps, p1 , p2);
+
     triangulation.refine_global(initial_global_refinement);
   }
 

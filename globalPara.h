@@ -4,14 +4,14 @@
 double global_PI = 3.1415927;
 
 // Heat acitvation area
-double square_length = 0.1;
+double square_length = 0.075;
 
 //Convection
-double conv_heat_loss = -0.004;
+double conv_heat_loss = -100.0;
 
 
 // # Laser
-double global_Pow_laser = 10;      // power [W]
+double global_Pow_laser = 100000;      // power [W]
 double global_spotsize_at_e_2 = 20e-6;  // laser spot size at e^(-2) [m]
 double global_c_laser = global_spotsize_at_e_2 / 4.0;   // C parameter in Gaussian func, [m]
 double global_c_hwhm = global_c_laser * 2.35482 / 2;    // HWHM, [m]
@@ -36,14 +36,17 @@ double global_film_thickness = 400e-9;  // film thickness, [m]
 #define BOUNDARY_NUM 11
 
 // Domain
-double l_x = 5.;
-double l_y = 1.;
+double l_x = 2.;
+double l_y = 1.25;
 
-const unsigned int initial_global_refinement = 3;
+const unsigned int initial_global_refinement = 1;
 
 // recoating
-int n_layers = 4;
-double layer_thickness = l_y / n_layers;
+// unsigned int n_layers = 4;
+// double layer_thickness = l_y / n_layers;
+double layer_thickness = 0.25;
+unsigned int n_layers = static_cast<unsigned int>(l_y/layer_thickness);
+
 double cooling_time = 0.2;
 
 double global_V_scan_x = 10;   // scan speed, [m/s]
