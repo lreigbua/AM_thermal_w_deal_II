@@ -1,7 +1,9 @@
 # Additive Manufacturing thermal modeling with deal.II
 
 Using the deal.II library, the provided code solves the transient heat transfer equation with adaptive mesh refinement based on the Kelly error estimator.
-Created by modifying Step-26 of Deal.II tutorial (https://www.dealii.org/current/doxygen/deal.II/step_26.html). Includes the following modifications:
+Created by modifying Step-26 of Deal.II tutorial (https://www.dealii.org/current/doxygen/deal.II/step_26.html).
+
+Includes the following modifications:
 
 - Contains inactive elements that get activated to simulate the printing of new layers, also adapting the cooling BCs to the new mesh.
 - Modifies the thermal load BCs to move the heat source in time simulating a moving laser.
