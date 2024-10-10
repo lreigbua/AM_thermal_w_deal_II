@@ -1,5 +1,9 @@
-// The program starts with the usual include files, all of which you should
-// have seen before by now:
+*/ Code developed by Luis Reig modifying the code provided in Step-26 of the Deal.II tutorial (https://www.dealii.org/current/doxygen/deal.II/step_26.html). 
+Includes modifications to activate elements in time and move the heat source in time.
+*/
+
+
+
 #include <deal.II/base/utilities.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/function.h>
