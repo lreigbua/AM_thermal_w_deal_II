@@ -2,8 +2,6 @@
 Includes modifications to activate elements in time and move the heat source in time.
 */
 
-
-
 #include <deal.II/base/utilities.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/function.h>
