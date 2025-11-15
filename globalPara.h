@@ -1,5 +1,3 @@
-
-
 // physics constants
 double global_PI = 3.1415927;
 
@@ -8,7 +6,6 @@ double square_length = 0.075;
 
 //Convection
 double conv_heat_loss = -100.0;
-
 
 // # Laser
 double global_Pow_laser = 100000;      // power [W]
@@ -39,21 +36,19 @@ double global_film_thickness = 400e-9;  // film thickness, [m]
 double l_x = 2.;
 double l_y = 1.25;
 
+// initial global refinement level
 const unsigned int initial_global_refinement = 1;
-
+// number of additional refinement levels to keep the newest layer fine
+const unsigned int geometry_refinement_cycles =2; 
 // recoating
-// unsigned int n_layers = 4;
-// double layer_thickness = l_y / n_layers;
 double layer_thickness = 0.25;
 unsigned int n_layers = static_cast<unsigned int>(l_y/layer_thickness);
-
 double cooling_time = 0.2;
 
 double global_V_scan_x = 10;   // scan speed, [m/s]
 
 // # simulation time
-double global_simulation_time_step = 1e-5;          // 10 [us]
+double global_simulation_time_step = 0.004;          // 10 [us]
 double scanning_time = l_x / global_V_scan_x;
 double layer_time = scanning_time + cooling_time;
-
 double global_simulation_end_time = layer_time * n_layers; //    100 [um] / scan speed

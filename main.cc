@@ -31,6 +31,8 @@ Includes modifications to activate elements in time and move the heat source in 
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <cmath>
+#include <algorithm>
 
 #include <deal.II/hp/fe_collection.h>
 #include <deal.II/hp/fe_values.h>
@@ -103,12 +105,9 @@ namespace Step26
     Vector<double> old_solution;
     Vector<double> system_rhs;
 
-
-
     double       time;
     double       time_step;
     unsigned int timestep_number;
-
 
     const double theta;
 
@@ -152,7 +151,7 @@ namespace Step26
     , triangulation(MPI_COMM_WORLD)
     , fe(1)
     , dof_handler(triangulation)
-    , time_step(2. / 500)
+    , time_step(global_simulation_time_step)
     , theta(0.5)
     , output_directory("output")
   {
@@ -211,7 +210,7 @@ namespace Step26
     system_rhs.reinit(dof_handler.n_dofs());
   }
 
-  // Method to specify the active and inactive FEs from the triangulation, which change every time powder is added.
+  // Deactivates all elements except the ones in the first layer
   template <int dim>
   void HeatEquation<dim>::deactivate_FEs()
   {
@@ -347,51 +346,78 @@ namespace Step26
   void HeatEquation<dim>::refine_mesh(const unsigned int min_grid_level,
                                       const unsigned int max_grid_level)
   {
-    Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
+    const double geometric_tolerance = 1e-10;
+    const double layer_event_tolerance = 1e-10;
+    const double layer_remainder = std::fmod(time, layer_time);
+    const bool activating_layer =
+      (time > layer_event_tolerance) &&
+      (layer_remainder < layer_event_tolerance ||
+       layer_time - layer_remainder < layer_event_tolerance);
 
-    KellyErrorEstimator<dim>::estimate(
-      dof_handler,
-      face_quadrature_collection,
-      std::map<types::boundary_id, const Function<dim> *>(),
-      solution,
-      estimated_error_per_cell);
+    const unsigned int active_layers =
+      std::max(1u,
+               std::min(n_layers,
+                        static_cast<unsigned int>(
+                          std::floor((time + geometric_tolerance) / layer_time)) +
+                          1));
 
-    GridRefinement::refine_and_coarsen_fixed_fraction(triangulation,
-                                                      estimated_error_per_cell,
-                                                      0.55,
-                                                      0.45);
+    const double layer_top =
+      std::min(l_y, static_cast<double>(active_layers) * layer_thickness);
+    const double layer_bottom = std::max(0.0, layer_top - layer_thickness);
 
-    if (triangulation.n_levels() > max_grid_level)
-      for (const auto &cell :
-           triangulation.active_cell_iterators_on_level(max_grid_level))
-        cell->clear_refine_flag();
-    for (const auto &cell :
-         triangulation.active_cell_iterators_on_level(min_grid_level))
-      cell->clear_coarsen_flag();
+    bool mesh_changed = false;
 
+    // Refine cells inside the newest layer and coarsen all other layers.
+    for (const auto &cell : triangulation.active_cell_iterators())
+      {
+        const double cell_center_height = cell->center()[1];
 
-    // SolutionTransfer<dim> solution_trans(dof_handler);
+        if (cell->level() < max_grid_level &&
+            cell_center_height >= layer_bottom - geometric_tolerance &&
+            cell_center_height <= layer_top + geometric_tolerance)
+          {
+            cell->set_refine_flag();
+            mesh_changed = true;
+          }
+        else if (cell->level() > min_grid_level &&
+                 (cell_center_height < layer_bottom - geometric_tolerance ||
+                  cell_center_height > layer_top + geometric_tolerance))
+          {
+            cell->set_coarsen_flag();
+            mesh_changed = true;
+          }
+        else
+          {
+            cell->clear_refine_flag();
+            cell->clear_coarsen_flag();
+          }
+      }
 
-    parallel::distributed::SolutionTransfer< dim, Vector<double>> solution_trans(dof_handler, true);
+    if (!mesh_changed && !activating_layer)
+      return;
 
-    Vector<double> previous_solution;
-    previous_solution = solution;
+    parallel::distributed::SolutionTransfer<dim, Vector<double>> solution_trans(
+      dof_handler, true);
+
+    Vector<double> previous_solution = solution;
+
     triangulation.prepare_coarsening_and_refinement();
     solution_trans.prepare_for_coarsening_and_refinement(previous_solution);
 
-    if (time > 1e-10 && std::fmod(time, layer_time) < 1e-10){
-      activate_FEs(); // using set_future_FE_index()
-    }
+    if (activating_layer)
+      {
+        activate_FEs(); // using set_future_FE_index()
+      }
 
     triangulation.execute_coarsening_and_refinement();
     setup_system();
 
-    if (time > 1e-10 && std::fmod(time, layer_time) < 1e-10){
-      solution = 50.;
-    }
+    if (activating_layer)
+      {
+        solution = 50.;
+      }
 
     solution_trans.interpolate(solution);
-    // solution_trans.interpolate(previous_solution, solution); this is for not paralel distributed triangulations
     constraints.distribute(solution);
   }
 
@@ -422,21 +448,25 @@ namespace Step26
   template <int dim>
   void HeatEquation<dim>::run()
   {
-    const unsigned int n_adaptive_pre_refinement_steps = 3;
-
     Create_Initial_Triangulation();
     
     deactivate_FEs();
     setup_system();
 
-    unsigned int pre_refinement_step = 0;
+    const unsigned int min_grid_level = initial_global_refinement;
+    const unsigned int max_grid_level =
+      initial_global_refinement + geometry_refinement_cycles;
+    const unsigned int refinement_passes_per_layer =
+      std::max(1u, geometry_refinement_cycles);
+
+    time = 0.0;
+    for (unsigned int pass = 0; pass < refinement_passes_per_layer; ++pass)
+      refine_mesh(min_grid_level, max_grid_level);
+    unsigned int layers_refined = (n_layers == 0 ? 0 : 1);
 
     Vector<double> tmp;
     Vector<double> forcing_terms;
 
-  start_time_iteration:
-
-    time            = 0.0;
     timestep_number = 0;
 
     tmp.reinit(solution.size());
@@ -452,7 +482,7 @@ namespace Step26
     output_results();
 
     // Then we start the main loop until the computed time exceeds our
-    // end time of 0.5. The first task is to build the right hand
+    // end time. The first task is to build the right hand
     // side of the linear system we need to solve in each time step.
     // Recall that it contains the term $MU^{n-1}-(1-\theta)k_n AU^{n-1}$.
     // We put these terms into the variable system_rhs, with the
@@ -529,66 +559,35 @@ namespace Step26
         system_matrix.add(theta * time_step, laplace_matrix);
 
         constraints.condense(system_matrix, system_rhs);
+        
 
-        // There is one more operation we need to do before we
-        // can solve it: boundary values. To this end, we create
-        // a boundary value object, set the proper time to the one
-        // of the current time step, and evaluate it as we have
-        // done many times before. The result is used to also
-        // set the correct boundary values in the linear system:
-        {
-          // BoundaryValues<dim> boundary_values_function;
-          // boundary_values_function.set_time(time);
-
-          // std::map<types::global_dof_index, double> boundary_values;
-          // VectorTools::interpolate_boundary_values(dof_handler,
-          //                                          0,
-          //                                          boundary_values_function,
-          //                                          boundary_values);
-
-          // MatrixTools::apply_boundary_values(boundary_values,
-          //                                    system_matrix,
-          //                                    solution,
-          //                                    system_rhs);
-        }
-
-        // With this out of the way, all we have to do is solve the
-        // system, generate graphical data, and...
         solve_time_step();
 
         output_results();
 
-        // ...take care of mesh refinement. Here, what we want to do is
-        // (i) refine the requested number of times at the very beginning
-        // of the solution procedure, after which we jump to the top to
-        // restart the time iteration, (ii) refine every fifth time
-        // step after that.
-        //
-        // The time loop and, indeed, the main part of the program ends
-        // with starting into the next time step by setting old_solution
-        // to the solution we have just computed.
-        if ((timestep_number == 1) &&
-            (pre_refinement_step < n_adaptive_pre_refinement_steps))
-          {
-            refine_mesh(initial_global_refinement,
-                        initial_global_refinement +
-                          n_adaptive_pre_refinement_steps);
-            ++pre_refinement_step;
+        const double layer_tolerance = 1e-10;
+        const double remainder = std::fmod(time, layer_time);
+        const bool new_layer_added =
+          (time > layer_tolerance) &&
+          (remainder < layer_tolerance ||
+           layer_time - remainder < layer_tolerance);
 
+        const unsigned int active_layers =
+          std::max(1u,
+                   std::min(n_layers,
+                            static_cast<unsigned int>(
+                              std::floor((time + layer_tolerance) /
+                                         layer_time)) +
+                              1));
+
+        if (new_layer_added && active_layers > layers_refined)
+          {
+            for (unsigned int pass = 0; pass < refinement_passes_per_layer;
+                 ++pass)
+              refine_mesh(min_grid_level, max_grid_level);
             tmp.reinit(solution.size());
             forcing_terms.reinit(solution.size());
-
-            std::cout << std::endl;
-
-            goto start_time_iteration;
-          }
-        else if ((timestep_number > 0) && (timestep_number % 5 == 0))
-          {
-            refine_mesh(initial_global_refinement,
-                        initial_global_refinement +
-                          n_adaptive_pre_refinement_steps);
-            tmp.reinit(solution.size());
-            forcing_terms.reinit(solution.size());
+            layers_refined = active_layers;
           }
 
         old_solution = solution;
