@@ -21,6 +21,7 @@ double global_init_position_y0 = 1;
 double global_rho_Tio2 = 4200;      // mass density, [kg/m^3]
 double global_C_Tio2 = 690;         // heat capacity, [J/kg/K]
 double global_k_Tio2 = 4.8;         // thermal conductivity, [W/m/K]
+
 // substrate
 double global_rho_glass = 2200;
 double global_C_glass = 700;
@@ -32,23 +33,31 @@ double global_film_thickness = 400e-9;  // film thickness, [m]
 // # about the MESH
 #define BOUNDARY_NUM 11
 
+
 // Domain
 double l_x = 2.;
 double l_y = 1.25;
 
-// initial global refinement level
-const unsigned int initial_global_refinement = 1;
-// number of additional refinement levels to keep the newest layer fine
-const unsigned int geometry_refinement_cycles =2; 
+// refinement
+int initial_global_refinement = 0;
+int min_refinement_level = 0;
+int max_refinement_level = 2;
+int refinement_passes = max_refinement_level - min_refinement_level;
+double lenght_refine_box = l_x / 2;
+double padding_before_refinement = l_x / 8;
+
 // recoating
-double layer_thickness = 0.25;
+double layer_thickness = 0.125;
 unsigned int n_layers = static_cast<unsigned int>(l_y/layer_thickness);
 double cooling_time = 0.2;
 
-double global_V_scan_x = 10;   // scan speed, [m/s]
+double global_V_scan_x = 20;   // scan speed, [m/s]
 
 // # simulation time
-double global_simulation_time_step = 0.004;          // 10 [us]
+double global_simulation_time_step = 0.002;          // 10 [us]
 double scanning_time = l_x / global_V_scan_x;
 double layer_time = scanning_time + cooling_time;
 double global_simulation_end_time = layer_time * n_layers; //    100 [um] / scan speed
+
+// tolerances
+double global_tolerance = 1e-10;
